@@ -1,0 +1,5 @@
+constants.o: constants.c extlzham.h
+decoder.o: decoder.c extlzham.h
+encoder.o: encoder.c extlzham.h
+error.o: error.c extlzham.h
+extlzham.o: extlzham.c extlzham.h

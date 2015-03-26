@@ -10,10 +10,11 @@ BIN = FileList["bin/*"]
 LIB = FileList["lib/**/*.rb"]
 SPEC = FileList["spec/**/*"]
 EXAMPLE = FileList["examples/**/*"]
-RAKEFILE = [File.basename(__FILE__), "gemstub.rb"]
+GEMSTUB_SRC = "gemstub.rb"
+RAKEFILE = [File.basename(__FILE__), GEMSTUB_SRC]
 EXTRA = []
 
-load "gemstub.rb"
+load GEMSTUB_SRC
 
 EXTCONF = FileList["ext/extconf.rb"]
 EXTCONF.reject! { |n| !File.file?(n) }
@@ -59,7 +60,7 @@ unless EXTCONF.empty?
     PLATFORM = platforms1[0]
 
     RUBY_VERSIONS = RUBYSET.map do |ruby|
-      ver = `#{ruby} --disable gem -rrbconfig -e "puts RbConfig::CONFIG['ruby_version']"`.chomp
+      ver = `#{ruby} --disable gem -rrbconfig -e "puts RbConfig::CONFIG['ruby_version']"`.slice(/\d+\.\d+/)
       raise "failed ruby checking - ``#{ruby}''" unless $?.success?
       [ver, ruby]
     end
@@ -85,9 +86,12 @@ unless EXTCONF.empty?
       sh "gem build #{GEMSPEC_NATIVE}"
     end
 
-    file GEMSPEC_NATIVE => __FILE__ do
+    file GEMSPEC_NATIVE => RAKEFILE do
       File.write(GEMSPEC_NATIVE, GEMSTUB_NATIVE.to_ruby, mode: "wb")
     end
+
+    desc "build c-extension libraries"
+    task "sofiles" => SOFILES
 
     SOFILES_SET.each do |(soname, ruby)|
       sodir = File.dirname(soname)

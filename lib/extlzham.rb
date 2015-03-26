@@ -2,7 +2,7 @@
 
 require "stringio"
 
-ver = RbConfig::CONFIG["ruby_version"]
+ver = RbConfig::CONFIG["ruby_version"].slice(/\d+\.\d+/)
 soname = File.basename(__FILE__, ".rb") << ".so"
 lib = File.join(File.dirname(__FILE__), ver, soname)
 if File.file?(lib)
@@ -132,6 +132,12 @@ module LZHAM
         dec.finish
       end
     end
+  end
+
+  class << self
+    alias compress encode
+    alias decompress decode
+    alias uncompress decode
   end
 
   Compressor = Encoder

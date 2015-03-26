@@ -15,12 +15,14 @@ $VPATH.push "$(srcdir)/../contrib/lzham/lzhamcomp",
             "$(srcdir)/../contrib/lzham/lzhamdecomp",
             "$(srcdir)/../contrib/lzham/lzhamlib"
 
-find_header "lzham.h", "$(srcdir)/../contrib/lzham/include"
-find_header "lzham_comp.h", "$(srcdir)/../contrib/lzham/lzhamcomp"
-find_header "lzham_decomp.h", "$(srcdir)/../contrib/lzham/lzhamdecomp"
+find_header "lzham.h", "$(srcdir)/../contrib/lzham/include" or abort 1
+find_header "lzham_comp.h", "$(srcdir)/../contrib/lzham/lzhamcomp" or abort 1
+find_header "lzham_decomp.h", "$(srcdir)/../contrib/lzham/lzhamdecomp" or abort 1
 
 if RbConfig::CONFIG["arch"] =~ /mingw/
   $CPPFLAGS << " -D__forceinline=__attribute__\\(\\(always_inline\\)\\)"
 end
+
+try_link "void main(void){}", " -Wl,-Bsymbolic " and $LDFLAGS << " -Wl,-Bsymbolic "
 
 create_makefile("extlzham")
