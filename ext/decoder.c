@@ -21,13 +21,13 @@ aux_conv_decode_params(VALUE opts)
         p.m_table_max_update_interval = 0;
         p.m_table_update_interval_slow_rate = 0;
     } else {
-        p.m_dict_size_log2 = aux_hash_lookup_to_u32(opts, IDdictsize, LZHAM_MIN_DICT_SIZE_LOG2);
-        p.m_table_update_rate = aux_hash_lookup_to_u32(opts, IDtable_update_rate, 0);
-        p.m_decompress_flags = aux_hash_lookup_to_u32(opts, IDflags, 0);
+        p.m_dict_size_log2 = aux_getoptu32(opts, id_dictsize, LZHAM_MIN_DICT_SIZE_LOG2);
+        p.m_table_update_rate = aux_getoptu32(opts, id_table_update_rate, 0);
+        p.m_decompress_flags = aux_getoptu32(opts, id_flags, 0);
         p.m_num_seed_bytes = 0;
         p.m_pSeed_bytes = NULL;
-        p.m_table_max_update_interval = aux_hash_lookup_to_u32(opts, IDtable_max_update_interval, 0);
-        p.m_table_update_interval_slow_rate = aux_hash_lookup_to_u32(opts, IDtable_update_interval_slow_rate, 0);
+        p.m_table_max_update_interval = aux_getoptu32(opts, id_table_max_update_interval, 0);
+        p.m_table_update_interval_slow_rate = aux_getoptu32(opts, id_table_update_interval_slow_rate, 0);
     }
 
     return p;
@@ -38,7 +38,7 @@ aux_conv_decode_params(VALUE opts)
  *  decode(string, max_decoded_size, opts = {}) -> decoded string
  */
 static VALUE
-ext_s_decode(int argc, VALUE argv[], VALUE mod)
+dec_s_decode(int argc, VALUE argv[], VALUE mod)
 {
     VALUE src, size, opts;
     rb_scan_args(argc, argv, "2:", &src, &size, &opts);
@@ -57,7 +57,7 @@ ext_s_decode(int argc, VALUE argv[], VALUE mod)
 
     if (s != LZHAM_DECOMP_STATUS_SUCCESS) {
         rb_str_resize(dest, 0);
-        aux_decode_error(s);
+        extlzham_decode_error(s);
     }
 
     rb_str_resize(dest, destsize);
@@ -74,7 +74,7 @@ struct decoder
 };
 
 static void
-ext_dec_mark(struct decoder *p)
+dec_mark(struct decoder *p)
 {
     if (p) {
         rb_gc_mark(p->outport);
@@ -83,7 +83,7 @@ ext_dec_mark(struct decoder *p)
 }
 
 static void
-ext_dec_free(struct decoder *p)
+dec_free(struct decoder *p)
 {
     if (p) {
         if (p->decoder) {
@@ -93,15 +93,15 @@ ext_dec_free(struct decoder *p)
 }
 
 static VALUE
-ext_dec_alloc(VALUE klass)
+dec_alloc(VALUE klass)
 {
     struct decoder *p;
-    VALUE obj = Data_Make_Struct(klass, struct decoder, ext_dec_mark, ext_dec_free, p);
+    VALUE obj = Data_Make_Struct(klass, struct decoder, dec_mark, dec_free, p);
     return obj;
 }
 
 static inline struct decoder *
-aux_decoder_refp(VALUE obj)
+getdecoderp(VALUE obj)
 {
     struct decoder *p;
     Data_Get_Struct(obj, struct decoder, p);
@@ -109,9 +109,9 @@ aux_decoder_refp(VALUE obj)
 }
 
 static inline struct decoder *
-aux_decoder_ref(VALUE obj)
+getdecoder(VALUE obj)
 {
-    struct decoder *p = aux_decoder_refp(obj);
+    struct decoder *p = getdecoderp(obj);
     if (!p || !p->decoder) {
         rb_raise(eError,
                  "not initialized - #<%s:%p>",
@@ -125,7 +125,7 @@ aux_decoder_ref(VALUE obj)
  *  initialize(outport = nil, opts = {})
  */
 static VALUE
-ext_dec_init(int argc, VALUE argv[], VALUE dec)
+dec_init(int argc, VALUE argv[], VALUE dec)
 {
     struct decoder *p = DATA_PTR(dec);
     if (p->decoder) {
@@ -196,7 +196,7 @@ struct dec_update_args
 static VALUE
 dec_update_protected(struct dec_update_args *args)
 {
-    struct decoder *p = aux_decoder_ref(args->decoder);
+    struct decoder *p = getdecoder(args->decoder);
     const char *inbuf, *intail;
 
     if (NIL_P(args->src)) {
@@ -217,7 +217,7 @@ dec_update_protected(struct dec_update_args *args)
                 (lzham_uint8 *)inbuf, &insize,
                 (lzham_uint8 *)RSTRING_PTR(p->outbuf), &outsize, args->flush);
         rb_str_unlocktmp(p->outbuf);
-//fprintf(stderr, "%s:%d:%s: status=%s (%d), insize=%zu, outsize=%zu\n", __FILE__, __LINE__, __func__, aux_decode_status_str(s), s, insize, outsize);
+//fprintf(stderr, "%s:%d:%s: status=%s (%d), insize=%zu, outsize=%zu\n", __FILE__, __LINE__, __func__, extlzham_decode_status_str(s), s, insize, outsize);
         if (!NIL_P(args->src)) {
             inbuf += insize;
         }
@@ -226,11 +226,11 @@ dec_update_protected(struct dec_update_args *args)
             s != LZHAM_DECOMP_STATUS_NEEDS_MORE_INPUT &&
             s != LZHAM_DECOMP_STATUS_SUCCESS) {
 
-            aux_decode_error(s);
+            extlzham_decode_error(s);
         }
         if (outsize > 0) {
             rb_str_set_len(p->outbuf, outsize);
-            rb_funcall2(p->outport, ID_op_lshift, 1, &p->outbuf);
+            rb_funcall2(p->outport, id_op_lshift, 1, &p->outbuf);
         }
     } while (inbuf < intail || s == LZHAM_DECOMP_STATUS_HAS_MORE_OUTPUT);
 
@@ -238,7 +238,7 @@ dec_update_protected(struct dec_update_args *args)
 }
 
 static inline void
-dec_update(VALUE dec, VALUE src, int flush)
+dec_update_common(VALUE dec, VALUE src, int flush)
 {
     struct dec_update_args args = { dec, src, flush };
     if (NIL_P(src)) {
@@ -259,57 +259,55 @@ dec_update(VALUE dec, VALUE src, int flush)
  *  update(src, flush = false) -> self
  */
 static VALUE
-ext_dec_update(int argc, VALUE argv[], VALUE dec)
+dec_update(int argc, VALUE argv[], VALUE dec)
 {
     VALUE src, flush;
     rb_scan_args(argc, argv, "11", &src, &flush);
     rb_check_type(src, RUBY_T_STRING);
-    dec_update(dec, src, RTEST(flush) ? 1 : 0);
+    dec_update_common(dec, src, RTEST(flush) ? 1 : 0);
     return dec;
 }
 
 static VALUE
-ext_dec_finish(VALUE dec)
+dec_finish(VALUE dec)
 {
-    dec_update(dec, Qnil, 1);
+    dec_update_common(dec, Qnil, 1);
     return dec;
 }
 
 static VALUE
-ext_dec_op_lshift(VALUE dec, VALUE src)
+dec_op_lshift(VALUE dec, VALUE src)
 {
     rb_check_type(src, RUBY_T_STRING);
-    dec_update(dec, src, 0);
+    dec_update_common(dec, src, 0);
     return dec;
 }
 
 static VALUE
-ext_dec_get_outport(VALUE dec)
+dec_get_outport(VALUE dec)
 {
-    struct decoder *p = aux_decoder_ref(dec);
-    return p->outport;
+    return getdecoder(dec)->outport;
 }
 
 static VALUE
-ext_dec_set_outport(VALUE dec, VALUE outport)
+dec_set_outport(VALUE dec, VALUE outport)
 {
-    struct decoder *p = aux_decoder_ref(dec);
-    p->outport = outport;
-    return outport;
+    return getdecoder(dec)->outport = outport;
 }
 
 void
-init_decoder(void)
+extlzham_init_decoder(void)
 {
+    RDOCFAKE(mLZHAM = rb_define_module("LZHAM"));
     cDecoder = rb_define_class_under(mLZHAM, "Decoder", rb_cObject);
     rb_include_module(cDecoder, mConsts);
-    rb_define_alloc_func(cDecoder, ext_dec_alloc);
-    rb_define_singleton_method(cDecoder, "decode", RUBY_METHOD_FUNC(ext_s_decode), -1);
-    rb_define_method(cDecoder, "initialize", RUBY_METHOD_FUNC(ext_dec_init), -1);
-    rb_define_method(cDecoder, "update", RUBY_METHOD_FUNC(ext_dec_update), -1);
-    rb_define_method(cDecoder, "finish", RUBY_METHOD_FUNC(ext_dec_finish), 0);
-    rb_define_method(cDecoder, "<<", RUBY_METHOD_FUNC(ext_dec_op_lshift), 1);
-    rb_define_method(cDecoder, "outport", RUBY_METHOD_FUNC(ext_dec_get_outport), 0);
-    rb_define_method(cDecoder, "outport=", RUBY_METHOD_FUNC(ext_dec_set_outport), 1);
+    rb_define_alloc_func(cDecoder, dec_alloc);
+    rb_define_singleton_method(cDecoder, "decode", RUBY_METHOD_FUNC(dec_s_decode), -1);
+    rb_define_method(cDecoder, "initialize", RUBY_METHOD_FUNC(dec_init), -1);
+    rb_define_method(cDecoder, "update", RUBY_METHOD_FUNC(dec_update), -1);
+    rb_define_method(cDecoder, "finish", RUBY_METHOD_FUNC(dec_finish), 0);
+    rb_define_method(cDecoder, "<<", RUBY_METHOD_FUNC(dec_op_lshift), 1);
+    rb_define_method(cDecoder, "outport", RUBY_METHOD_FUNC(dec_get_outport), 0);
+    rb_define_method(cDecoder, "outport=", RUBY_METHOD_FUNC(dec_set_outport), 1);
 
 }

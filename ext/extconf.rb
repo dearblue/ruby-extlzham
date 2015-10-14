@@ -21,6 +21,7 @@ find_header "lzham_decomp.h", "$(srcdir)/../contrib/lzham/lzhamdecomp" or abort 
 
 if RbConfig::CONFIG["arch"] =~ /mingw/
   $CPPFLAGS << " -D__forceinline=__attribute__\\(\\(always_inline\\)\\)"
+  $LDFLAGS << " -static-libgcc -static-libstdc++"
 end
 
 try_link "void main(void){}", " -Wl,-Bsymbolic " and $LDFLAGS << " -Wl,-Bsymbolic "

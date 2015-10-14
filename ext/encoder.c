@@ -19,15 +19,15 @@ scan_encode_params(VALUE opts)
         p.m_table_max_update_interval = 0;
         p.m_table_update_interval_slow_rate = 0;
     } else {
-        p.m_dict_size_log2 = aux_hash_lookup_to_u32(opts, IDdictsize, LZHAM_MIN_DICT_SIZE_LOG2);
-        p.m_level = aux_hash_lookup_to_u32(opts, IDlevel, LZHAM_COMP_LEVEL_DEFAULT);
-        p.m_table_update_rate = aux_hash_lookup_to_u32(opts, IDtable_update_rate, 0);
-        p.m_max_helper_threads = aux_hash_lookup_to_u32(opts, IDthreads, -1);
-        p.m_compress_flags = aux_hash_lookup_to_u32(opts, IDflags, 0);
+        p.m_dict_size_log2 = aux_getoptu32(opts, id_dictsize, LZHAM_MIN_DICT_SIZE_LOG2);
+        p.m_level = aux_getoptu32(opts, id_level, LZHAM_COMP_LEVEL_DEFAULT);
+        p.m_table_update_rate = aux_getoptu32(opts, id_table_update_rate, 0);
+        p.m_max_helper_threads = aux_getoptu32(opts, id_threads, -1);
+        p.m_compress_flags = aux_getoptu32(opts, id_flags, 0);
         p.m_num_seed_bytes = 0;
         p.m_pSeed_bytes = NULL;
-        p.m_table_max_update_interval = aux_hash_lookup_to_u32(opts, IDtable_max_update_interval, 0);
-        p.m_table_update_interval_slow_rate = aux_hash_lookup_to_u32(opts, IDtable_update_interval_slow_rate, 0);
+        p.m_table_max_update_interval = aux_getoptu32(opts, id_table_max_update_interval, 0);
+        p.m_table_update_interval_slow_rate = aux_getoptu32(opts, id_table_update_interval_slow_rate, 0);
     }
     return p;
 }
@@ -38,16 +38,13 @@ scan_encode_args(int argc, VALUE argv[], VALUE *src, size_t *srcsize, VALUE *des
     VALUE opts;
     rb_scan_args(argc, argv, "11:", src, dest, &opts);
     rb_check_type(*src, RUBY_T_STRING);
-    //rb_str_locktmp(src);
     *srcsize = RSTRING_LEN(*src);
     *destsize = lzham_z_compressBound(*srcsize);
     if (NIL_P(*dest)) {
         *dest = rb_str_buf_new(*destsize);
     } else {
         rb_check_type(*dest, RUBY_T_STRING);
-        rb_str_modify(*dest);
-        rb_str_set_len(*dest, 0);
-        rb_str_modify_expand(*dest, *destsize);
+        aux_str_reserve(*dest, *destsize);
     }
     *params = scan_encode_params(opts);
 }
@@ -58,7 +55,7 @@ scan_encode_args(int argc, VALUE argv[], VALUE *src, size_t *srcsize, VALUE *des
  *  encode(src, dest, opts = {}) -> encoded string
  */
 static VALUE
-ext_s_encode(int argc, VALUE argv[], VALUE mod)
+enc_s_encode(int argc, VALUE argv[], VALUE mod)
 {
     VALUE src, dest;
     size_t srcsize, destsize;
@@ -66,16 +63,13 @@ ext_s_encode(int argc, VALUE argv[], VALUE mod)
     scan_encode_args(argc, argv, &src, &srcsize, &dest, &destsize, &params);
     lzham_compress_status_t s;
     s = lzham_compress_memory(&params,
-                              (lzham_uint8 *)RSTRING_PTR(dest), &destsize,
-                              (lzham_uint8 *)RSTRING_PTR(src), srcsize, NULL);
-    //rb_str_unlocktmp(src);
+            (lzham_uint8 *)RSTRING_PTR(dest), &destsize,
+            (const lzham_uint8 *)RSTRING_PTR(src), srcsize, NULL);
 
     if (s != LZHAM_COMP_STATUS_SUCCESS) {
-        rb_str_resize(dest, 0);
-        aux_encode_error(s);
+        extlzham_encode_error(s);
     }
 
-    rb_str_resize(dest, destsize);
     rb_str_set_len(dest, destsize);
 
     return dest;
@@ -89,7 +83,7 @@ struct encoder
 };
 
 static void
-ext_enc_mark(struct encoder *p)
+enc_mark(struct encoder *p)
 {
     if (p) {
         rb_gc_mark(p->outport);
@@ -98,7 +92,7 @@ ext_enc_mark(struct encoder *p)
 }
 
 static void
-ext_enc_free(struct encoder *p)
+enc_free(struct encoder *p)
 {
     if (p) {
         if (p->encoder) {
@@ -108,15 +102,15 @@ ext_enc_free(struct encoder *p)
 }
 
 static VALUE
-ext_enc_alloc(VALUE klass)
+enc_alloc(VALUE klass)
 {
     struct encoder *p;
-    VALUE obj = Data_Make_Struct(klass, struct encoder, ext_enc_mark, ext_enc_free, p);
+    VALUE obj = Data_Make_Struct(klass, struct encoder, enc_mark, enc_free, p);
     return obj;
 }
 
 static inline struct encoder *
-aux_encoder_refp(VALUE obj)
+getencoderp(VALUE obj)
 {
     struct encoder *p;
     Data_Get_Struct(obj, struct encoder, p);
@@ -124,9 +118,9 @@ aux_encoder_refp(VALUE obj)
 }
 
 static inline struct encoder *
-aux_encoder_ref(VALUE obj)
+getencoder(VALUE obj)
 {
-    struct encoder *p = aux_encoder_refp(obj);
+    struct encoder *p = getencoderp(obj);
     if (!p || !p->encoder) {
         rb_raise(eError,
                  "not initialized - #<%s:%p>",
@@ -140,7 +134,7 @@ aux_encoder_ref(VALUE obj)
  *  initialize(outport = nil, opts = {})
  */
 static VALUE
-ext_enc_init(int argc, VALUE argv[], VALUE enc)
+enc_init(int argc, VALUE argv[], VALUE enc)
 {
     struct encoder *p = DATA_PTR(enc);
     if (p->encoder) {
@@ -212,7 +206,7 @@ aux_lzham_compress2(lzham_compress_state_ptr state,
 static VALUE
 enc_update_protected(struct enc_update_args *args)
 {
-    struct encoder *p = aux_encoder_ref(args->encoder);
+    struct encoder *p = getencoder(args->encoder);
     const char *inbuf, *intail;
 
     if (NIL_P(args->src)) {
@@ -236,17 +230,17 @@ enc_update_protected(struct enc_update_args *args)
         if (!NIL_P(args->src)) {
             inbuf += insize;
         }
-//fprintf(stderr, "%s:%d:%s: status=%s (%d), insize=%zu, outsize=%zu\n", __FILE__, __LINE__, __func__, aux_encode_status_str(s), s, insize, outsize);
+//fprintf(stderr, "%s:%d:%s: status=%s (%d), insize=%zu, outsize=%zu\n", __FILE__, __LINE__, __func__, extlzham_encode_status_str(s), s, insize, outsize);
         if (s != LZHAM_COMP_STATUS_SUCCESS &&
             s != LZHAM_COMP_STATUS_NEEDS_MORE_INPUT &&
             s != LZHAM_COMP_STATUS_NOT_FINISHED &&
             s != LZHAM_COMP_STATUS_HAS_MORE_OUTPUT) {
 
-            aux_encode_error(s);
+            extlzham_encode_error(s);
         }
         if (outsize > 0) {
             rb_str_set_len(p->outbuf, outsize);
-            rb_funcall2(p->outport, ID_op_lshift, 1, &p->outbuf);
+            rb_funcall2(p->outport, id_op_lshift, 1, &p->outbuf);
         }
     } while (inbuf < intail || s == LZHAM_COMP_STATUS_HAS_MORE_OUTPUT);
 
@@ -254,7 +248,7 @@ enc_update_protected(struct enc_update_args *args)
 }
 
 static inline void
-enc_update(VALUE enc, VALUE src, int flush)
+enc_update_common(VALUE enc, VALUE src, int flush)
 {
     struct enc_update_args args = { enc, src, flush };
     if (NIL_P(src)) {
@@ -275,64 +269,104 @@ enc_update(VALUE enc, VALUE src, int flush)
  *  update(src, flush = LZHAM::NO_FLUSH) -> self
  */
 static VALUE
-ext_enc_update(int argc, VALUE argv[], VALUE enc)
+enc_update(int argc, VALUE argv[], VALUE enc)
 {
     VALUE src, flush;
     rb_scan_args(argc, argv, "11", &src, &flush);
     rb_check_type(src, RUBY_T_STRING);
     if (NIL_P(flush)) {
-        enc_update(enc, src, LZHAM_NO_FLUSH);
+        enc_update_common(enc, src, LZHAM_NO_FLUSH);
     } else {
-        enc_update(enc, src, NUM2INT(flush));
+        enc_update_common(enc, src, NUM2INT(flush));
     }
     return enc;
 }
 
+/*
+ * call-seq:
+ *  write(src) -> self
+ *  self << src -> self
+ *
+ * same as <tt>enc.update(src)</tt>
+ */
 static VALUE
-ext_enc_finish(VALUE enc)
+enc_write(VALUE enc, VALUE src)
 {
-    enc_update(enc, Qnil, LZHAM_FINISH);
+    rb_check_type(src, RUBY_T_STRING);
+    enc_update_common(enc, src, LZHAM_NO_FLUSH);
     return enc;
 }
 
 /*
- * same as <tt>enc.update(src)</tt>
+ * call-seq:
+ *  flush(flush = LZHAM::SYNC_FLUSH) -> self
+ *
+ * Accept flush types: LZHAM::SYNC_FLUSH, LZHAM::FULL_FLUSH, LZHAM::TABLE_FLUSH
  */
 static VALUE
-ext_enc_op_lshift(VALUE enc, VALUE src)
+enc_flush(int argc, VALUE argv[], VALUE enc)
 {
-    rb_check_type(src, RUBY_T_STRING);
-    enc_update(enc, src, LZHAM_NO_FLUSH);
+    int flush;
+    switch (argc) {
+    case 0:
+        flush = LZHAM_SYNC_FLUSH;
+        break;
+    case 1:
+        flush = NUM2INT(argv[0]);
+        if (flush != LZHAM_SYNC_FLUSH &&
+            flush != LZHAM_FULL_FLUSH &&
+            flush != LZHAM_TABLE_FLUSH) {
+
+            rb_raise(rb_eArgError,
+                    "wrong flush type (%d for LZHAM::SYNC_FLUSH (%d), LZHAM::FULL_FLUSH (%d) and LZHAM::TABLE_FLUSH (%d))",
+                    flush, LZHAM_SYNC_FLUSH, LZHAM_FULL_FLUSH, LZHAM_TABLE_FLUSH);
+        }
+        break;
+    default:
+        rb_error_arity(argc, 0, 1);
+    }
+
+    enc_update_common(enc, Qnil, flush);
+
+    return enc;
+}
+
+static VALUE
+enc_finish(VALUE enc)
+{
+    enc_update_common(enc, Qnil, LZHAM_FINISH);
     return enc;
 }
 
 
 static VALUE
-ext_enc_get_outport(VALUE enc)
+enc_get_outport(VALUE enc)
 {
-    struct encoder *p = aux_encoder_ref(enc);
-    return p->outport;
+    return getencoder(enc)->outport;
 }
 
 static VALUE
-ext_enc_set_outport(VALUE enc, VALUE outport)
+enc_set_outport(VALUE enc, VALUE outport)
 {
-    struct encoder *p = aux_encoder_ref(enc);
-    p->outport = outport;
-    return outport;
+    return getencoder(enc)->outport = outport;
 }
 
 void
-init_encoder(void)
+extlzham_init_encoder(void)
 {
+    RDOCFAKE(mLZHAM = rb_define_module("LZHAM"));
     cEncoder = rb_define_class_under(mLZHAM, "Encoder", rb_cObject);
     rb_include_module(cEncoder, mConsts);
-    rb_define_alloc_func(cEncoder, ext_enc_alloc);
-    rb_define_singleton_method(cEncoder, "encode", RUBY_METHOD_FUNC(ext_s_encode), -1);
-    rb_define_method(cEncoder, "initialize", RUBY_METHOD_FUNC(ext_enc_init), -1);
-    rb_define_method(cEncoder, "update", RUBY_METHOD_FUNC(ext_enc_update), -1);
-    rb_define_method(cEncoder, "finish", RUBY_METHOD_FUNC(ext_enc_finish), 0);
-    rb_define_method(cEncoder, "<<", RUBY_METHOD_FUNC(ext_enc_op_lshift), 1);
-    rb_define_method(cEncoder, "outport", RUBY_METHOD_FUNC(ext_enc_get_outport), 0);
-    rb_define_method(cEncoder, "outport=", RUBY_METHOD_FUNC(ext_enc_set_outport), 1);
+    rb_define_alloc_func(cEncoder, enc_alloc);
+    rb_define_singleton_method(cEncoder, "encode", RUBY_METHOD_FUNC(enc_s_encode), -1);
+    rb_define_method(cEncoder, "initialize", RUBY_METHOD_FUNC(enc_init), -1);
+    rb_define_method(cEncoder, "update", RUBY_METHOD_FUNC(enc_update), -1);
+    rb_define_method(cEncoder, "write", RUBY_METHOD_FUNC(enc_write), 1);
+    rb_define_method(cEncoder, "flush", RUBY_METHOD_FUNC(enc_flush), -1);
+    rb_define_method(cEncoder, "finish", RUBY_METHOD_FUNC(enc_finish), 0);
+    rb_define_method(cEncoder, "outport", RUBY_METHOD_FUNC(enc_get_outport), 0);
+    rb_define_method(cEncoder, "outport=", RUBY_METHOD_FUNC(enc_set_outport), 1);
+    rb_define_alias(cEncoder, "<<", "write");
+    rb_define_alias(cEncoder, "encode", "update");
+    rb_define_alias(cEncoder, "compress", "update");
 }

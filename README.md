@@ -5,16 +5,16 @@
 This is ruby bindings for compression library
 [LZHAM (https://github.com/richgel999/lzham\_codec)](https://github.com/richgel999/lzham_codec).
 
-*   PACKAGE NAME: extlzham
-*   AUTHOR: dearblue <dearblue@users.sourceforge.jp>
-*   VERSION: 0.0.1.PROTOTYPE2
-*   LICENSING: 2-clause BSD License
-*   REPORT ISSUE TO: <http://sourceforge.jp/projects/rutsubo/ticket/>
-*   DEPENDENCY RUBY: ruby-2.0+
-*   DEPENDENCY RUBY GEMS: (none)
-*   DEPENDENCY LIBRARY: (none)
-*   BUNDLED EXTERNAL LIBRARIES:
-    *   LZHAM <https://github.com/richgel999/lzham_codec>
+  * package name: extlzham
+  * author: dearblue (mailto:dearblue@users.osdn.me)
+  * version: 0.0.1.PROTOTYPE2
+  * license: 2-clause BSD License (<LICENSE.md>)
+  * report issue to: <https://osdn.jp/projects/rutsubo/ticket/>
+  * dependency ruby: ruby-2.0+
+  * dependency ruby gems: (none)
+  * dependency libraries: (none)
+  * bundled external libraries:
+      * LZHAM-1.0-stable1 <https://github.com/richgel999/lzham_codec/releases/tag/v1_0_stable1>
 
 
 ## HOW TO USE

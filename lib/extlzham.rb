@@ -1,7 +1,5 @@
 #vim: set fileencoding:utf-8
 
-require "stringio"
-
 ver = RbConfig::CONFIG["ruby_version"].slice(/\d+\.\d+/)
 soname = File.basename(__FILE__, ".rb") << ".so"
 lib = File.join(File.dirname(__FILE__), ver, soname)
@@ -11,6 +9,7 @@ else
   require_relative soname
 end
 
+require "stringio"
 require_relative "extlzham/version"
 
 module LZHAM

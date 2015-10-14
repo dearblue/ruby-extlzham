@@ -8,7 +8,7 @@ VALUE eError;
         break                    \
 
 const char *
-aux_encode_status_str(lzham_compress_status_t status)
+extlzham_encode_status_str(lzham_compress_status_t status)
 {
     const char *mesg;
     switch (status) {
@@ -29,15 +29,15 @@ aux_encode_status_str(lzham_compress_status_t status)
 }
 
 void
-aux_encode_error(lzham_compress_status_t status)
+extlzham_encode_error(lzham_compress_status_t status)
 {
     rb_raise(eError,
              "LZHAM encode error - %s (0x%04X)",
-             aux_encode_status_str(status), status);
+             extlzham_encode_status_str(status), status);
 }
 
 const char *
-aux_decode_status_str(lzham_decompress_status_t status)
+extlzham_decode_status_str(lzham_decompress_status_t status)
 {
     const char *mesg;
     switch (status) {
@@ -66,15 +66,15 @@ aux_decode_status_str(lzham_decompress_status_t status)
 }
 
 void
-aux_decode_error(lzham_decompress_status_t status)
+extlzham_decode_error(lzham_decompress_status_t status)
 {
     rb_raise(eError,
              "LZHAM decode error - %s (0x%04X)",
-             aux_decode_status_str(status), status);
+             extlzham_decode_status_str(status), status);
 }
 
 void
-init_error(void)
+extlzham_init_error(void)
 {
     eError = rb_define_class_under(mLZHAM, "Error", rb_eRuntimeError);
 }
